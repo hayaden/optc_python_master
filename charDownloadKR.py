@@ -183,6 +183,6 @@ if __name__ == "__main__":
         id_end = int(sys.argv[2])
         id_range = (id_start, id_end)
     else:
-        id_range = (s)  # 기본값
+        id_range = (14500, 14501)  # 기본값
 
     main(id_range=id_range)

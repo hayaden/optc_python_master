@@ -1,7 +1,13 @@
 import subprocess
+import os
 
 # 공통 범위 설정
 id_range = (14500, 14590)
+
+# ✅ data 폴더 없으면 생성
+if not os.path.exists("data"):
+    os.makedirs("data")
+    print("📁 'data' 폴더 생성 완료")
 
 # 0. 사쿠라 DB 다운로드
 subprocess.run(["python", "download_SakuraDB.py"], check=True)
