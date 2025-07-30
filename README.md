@@ -10,8 +10,8 @@
 ## Installation
 
 ```
-git clone https://https://github.com/hayaden/optc_python_master
-cd ptc_python_master
+git clone https://github.com/hayaden/optc_python_master
+cd optc_python_master
 python -m venv env
 source env/bin/activate
 pip install -r requirements.txt
