@@ -38,10 +38,9 @@ pip install -r requirements.txt
 * TM_Gimmick_generate_index.py 실행
 * 실행하면 docs폴더에 index.html 생성
 
-
-### 최신 유대 패턴 정보
-* 추가 예정
-
+### 최신 트맵/궤적/유대 패턴 정보
+* Gimmick_generate_total.py
+* 실행하면 docs폴더에 index.html 생성
 ### Bisque
 
 Contains methods to encrypt and decrypt game's requests, see `bisqueDoc.py` for more details.
