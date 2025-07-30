@@ -3,7 +3,7 @@ import sqlite3
 import json
 import subprocess
 from collections import defaultdict
-from readTMGimmickInformation import export_gimmick_html, get_gimmick_html_as_string
+from readTMGimmickInformation import export_tm_gimmick_html, get_tm_gimmick_html_as_string
 
 DB_PATH = "./data/sakura_ko.db"
 OUTPUT_DIR = "./docs"
@@ -117,7 +117,7 @@ for server_id in gimmick_map:
     else:
         tag = None
 
-    body = get_gimmick_html_as_string(server_id)
+    body = get_tm_gimmick_html_as_string(server_id)
     header = make_boss_header(name, attr_id, tag)
     all_html[map_id].append(f"<hr>{header}\n{body}")
 

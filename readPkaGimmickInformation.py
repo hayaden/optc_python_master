@@ -236,17 +236,18 @@ def format_text_with_icon(texts, icons):
         lines.append(f'<div class="icon-line">{prefix}{highlighted}</div>')
     return lines
 
-def export_tm_gimmick_html(server_id=1001971, db_path="data/sakura_ko.db", output_path="docs/index.html"):
+def export_pka_gimmick_html(server_id=1001971, db_path="data/sakura_ko.db", output_path="docs/index.html"):
     try:
+        LEVEL_CUTOFF = 150  # ✅ 컷오프 기준: 150 이상이면 무시
+
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # ✅ questName 가져오기
         cursor.execute("SELECT questName_ FROM MstQuest_ WHERE questId_=?", (server_id,))
         name_row = cursor.fetchone()
         quest_name = name_row[0] if name_row else f"Quest {server_id}"
-        quest_name =""
-        # ✅ gimmickJson 가져오기
+        
+
         cursor.execute("SELECT gimmickJson_ FROM MstQuestGimmickInformation_ WHERE questId_=?", (server_id,))
         row = cursor.fetchone()
         if not row:
@@ -260,6 +261,10 @@ def export_tm_gimmick_html(server_id=1001971, db_path="data/sakura_ko.db", outpu
             for phase in items:
                 min_level = to_int(phase.get("min_trail_level"))
                 max_level = to_int(phase.get("max_trail_level"))
+
+                if min_level >= LEVEL_CUTOFF:
+                    continue  # ✅ 컷오프 이상이면 무시
+
                 stage_num = to_int(stage_id)
 
                 entry = {
@@ -283,14 +288,29 @@ def export_tm_gimmick_html(server_id=1001971, db_path="data/sakura_ko.db", outpu
                         "icons": value.get("icon", []),
                         "conditions": value.get("condition_texts", [])
                     })
-                gimmick_list.append(entry)
 
+                # ✅ 중복 방지: 동일한 항목 있는지 확인
+                is_duplicate = any(
+                    e["stage"] == entry["stage"] and
+                    e["minLevel"] == entry["minLevel"] and
+                    e["maxLevel"] == entry["maxLevel"] and
+                    e["patterns"] == entry["patterns"]
+                    for e in gimmick_list
+                )
+                if not is_duplicate:
+                    gimmick_list.append(entry)
+
+        # ✅ 그룹핑: maxLevel >= 100 → "100+" 그룹
         grouped = defaultdict(list)
         for entry in gimmick_list:
-            grouped[(entry["minLevel"], entry["maxLevel"])].append(entry)
+            if entry["maxLevel"] >= 100:
+                group_key = "100+"
+            else:
+                group_key = (entry["minLevel"], entry["maxLevel"])
+            grouped[group_key].append(entry)
 
         LABEL_INFO = {
-            "6_": ("초기 상태", "label-initial"),  
+            "6_": ("초기 상태", "label-initial"),
             "1_": ("선제 행동", "label-preemptive"),
             "5_": ("특수 끼어들기", "label-special"),
             "4_": ("격파 시 행동", "label-death"),
@@ -300,7 +320,6 @@ def export_tm_gimmick_html(server_id=1001971, db_path="data/sakura_ko.db", outpu
         }
         SORT_PRIORITY = {k: i for i, k in enumerate(LABEL_INFO.keys())}
 
-        # ✅ HTML 헤더 및 제목 추가
         html = [f"""<html>
 <head>
 <meta charset="UTF-8">
@@ -320,35 +339,47 @@ def export_tm_gimmick_html(server_id=1001971, db_path="data/sakura_ko.db", outpu
 </style>
 </head>
 <body>
-       <h1>{quest_name}</h1>"""]
+<h1>{quest_name}</h1>"""]
+        
+        rendered_level_flags = set()
+        for level_key, entries in sorted(grouped.items(), key=lambda x: (x[0] != "100+", x[0])):
+            if level_key == "100+":
+                label = "Level: 100+"
+                level_flag = "100+"
+            else:
+                min_lv, max_lv = level_key
+                label = difficulty_label(min_lv, max_lv)
+                level_flag = level_key
 
-        # 🔁 정렬만 stage 기준
-        sorted_entries = sorted(gimmick_list, key=lambda x: x["stage"])
+            if label and level_flag not in rendered_level_flags:
+                html.append('<hr style="border: 1px solid white;">')
+                html.append(f'<h2 style="color: gold;">{label}</h2>')
+                rendered_level_flags.add(level_flag)
 
-        for entry in sorted_entries:
-            html.append(f"<h3>Stage {entry['stage']}:</h3>")
-            if "level_condition_text" in entry:
-                html.append(f'<div style="color: gold; font-weight: bold;">{clean_text(entry["level_condition_text"])}</div>')
+            for entry in sorted(entries, key=lambda x: x["stage"]):
+                html.append(f"<h3>Stage {entry['stage']}:</h3>")
+                if "level_condition_text" in entry:
+                    html.append(f'<div style="color: gold; font-weight: bold;">{clean_text(entry["level_condition_text"])}</div>')
 
-            sorted_patterns = sorted(
-                entry["patterns"],
-                key=lambda p: SORT_PRIORITY.get(
-                    next((k for k in SORT_PRIORITY if p["slot"].startswith(k)), "zzz")
+                sorted_patterns = sorted(
+                    entry["patterns"],
+                    key=lambda p: SORT_PRIORITY.get(
+                        next((k for k in SORT_PRIORITY if p["slot"].startswith(k)), "zzz")
+                    )
                 )
-            )
 
-            for pattern in sorted_patterns:
-                slot = pattern["slot"]
-                for prefix, (label_text, label_class) in LABEL_INFO.items():
-                    if slot.startswith(prefix):
-                        if pattern["conditions"]:
-                            for cond in pattern["conditions"]:
-                                html.append(f'<span class="{label_class}" style="color:#87cefa">{label_text}: {clean_text(cond)}</span><br>')
-                        else:
-                            html.append(f'<span class="{label_class}">{label_text}:</span><br>')
-                        html += format_text_with_icon(pattern["texts"], pattern["icons"])
-                        break
-            html.append("<br>")
+                for pattern in sorted_patterns:
+                    slot = pattern["slot"]
+                    for prefix, (label_text, label_class) in LABEL_INFO.items():
+                        if slot.startswith(prefix):
+                            if pattern["conditions"]:
+                                for cond in pattern["conditions"]:
+                                    html.append(f'<span class="{label_class}" style="color:#87cefa">{label_text}: {clean_text(cond)}</span><br>')
+                            else:
+                                html.append(f'<span class="{label_class}">{label_text}:</span><br>')
+                            html += format_text_with_icon(pattern["texts"], pattern["icons"])
+                            break
+                html.append("<br>")
 
         html.append("</body></html>")
 
@@ -365,13 +396,14 @@ def export_tm_gimmick_html(server_id=1001971, db_path="data/sakura_ko.db", outpu
         print(f"❌ 오류 발생: {e}")
 
 
-def get_tm_gimmick_html_as_string(server_id=5000029, db_path="data/sakura_ko.db"):
+
+def get_pka_gimmick_html_as_string(server_id=5000029, db_path="data/sakura_ko.db"):
     from io import StringIO
     import contextlib
 
     buf = StringIO()
     with contextlib.redirect_stdout(buf):
-        export_tm_gimmick_html(server_id=server_id, db_path=db_path, output_path="__temp__.html")
+        export_pka_gimmick_html(server_id=server_id, db_path=db_path, output_path="__temp__.html")
     if os.path.exists("__temp__.html"):
         with open("__temp__.html", "r", encoding="utf-8") as f:
             html_body = f.read()
@@ -382,4 +414,4 @@ def get_tm_gimmick_html_as_string(server_id=5000029, db_path="data/sakura_ko.db"
     return html_body.strip()
 
 if __name__ == "__main__":
-    export_tm_gimmick_html()
+    export_pka_gimmick_html()

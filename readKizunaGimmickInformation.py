@@ -4,9 +4,17 @@ import os
 import re
 from collections import defaultdict
 
-BASE_IMG_URL = "https://hayaden.github.io/optc-gimmicks/img"
 BASE_IMG_URL = "img"
+trademark_color_map = {
+    1: "#ee0000",  # 힘
+    2: "#258325",  # 기
+    3: "#0329fd",  # 속
+    4: "#e79925",  # 심
+    5: "#7515A1",  # 지
+}
 
+
+# (ICON_MAP, FORCED_ICON_KEYWORDS 등 생략 - 기존 코드 그대로 사용하세요)
 ICON_MAP = {
     1: "common_attack_up_01_icon", 60: "common_icon_chain_upper_limit", 15: "common_icon_blind",
     183: "common_icon_252_skill", 25: "common_icon_damagecut_dummy", 22: "state_icon_invincible",
@@ -202,8 +210,8 @@ def to_int(val, default=0):
 
 def highlight_element_tags(text):
     tag_colors = {
-        "[힘]": "#ff4d4d", "[기]": "#4dff4d", "[속]": "#4d9aff",
-        "[심]": "#ffff4d", "[지]": "#d24dff", "[고기]": "#a0522d"
+        "[힘]": "#ee0000", "[기]": "#258325", "[속]": "#0329fd",
+        "[심]": "#e79925", "[지]": "#7515A1", "[고기]": "#a0522d"
     }
     for tag, color in tag_colors.items():
         text = text.replace(tag, f'<span style="color:{color}; font-weight:bold;">{tag}</span>')
@@ -213,9 +221,6 @@ def clean_text(text):
     text = text.replace("\u003c", "<").replace("\u003e", ">")
     return re.sub(r"<.*?>", "", text).strip()
 
-def difficulty_label(min_lv, max_lv):
-    return "Level: 100+" if max_lv >= 100 else f"Level: {min_lv}-{max_lv}" if (min_lv or max_lv) else "레벨 없음"
-
 def format_text_with_icon(texts, icons):
     if icons is None:
         icons = []
@@ -223,7 +228,7 @@ def format_text_with_icon(texts, icons):
     for i, text in enumerate(texts):
         icon_id = icons[i] if i < len(icons) else 0
 
-        if icon_id == 0:# ✅ 텍스트 기반 아이콘 강제 지정
+        if icon_id == 0:
             for keyword, forced_icon_id in FORCED_ICON_KEYWORDS:
                 if keyword in text:
                     icon_id = forced_icon_id
@@ -236,23 +241,54 @@ def format_text_with_icon(texts, icons):
         lines.append(f'<div class="icon-line">{prefix}{highlighted}</div>')
     return lines
 
-def export_tm_gimmick_html(server_id=1001971, db_path="data/sakura_ko.db", output_path="docs/index.html"):
+def export_kizuna_gimmick_html(server_id=1001971, db_path="data/sakura_ko.db", output_path="docs/index.html"):
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        # ✅ questName 가져오기
+        # ✅ 보스 이름 및 태그
+        boss_info = ""
+        cursor.execute("""
+            SELECT requiredKizunaBossTicket_, requiredKizunaSuperBossTicket_, bossTrademark_
+            FROM MstKizunaBattleEventQuest_
+            WHERE questId_=?
+        """, (server_id,))
+        boss_row = cursor.fetchone()
+        if boss_row:
+            required_boss, required_super, trademark = boss_row
+            trademark_map = {
+                1: "[힘]", 2: "[기]", 3: "[속]", 4: "[심]", 5: "[지]"
+            }
+            trademark_color_map = {
+                   1: "#ee0000",  # 힘
+                    2: "#258325",  # 기
+                    3: "#0329fd",  # 속
+                    4: "#e79925",  # 심
+                    5: "#7515A1",  # 지
+            }
+            attr_tag = trademark_map.get(trademark, "")
+            color = trademark_color_map.get(trademark, "#ffffff")
+            
+            if required_boss == 20:
+                boss_type = f'<span style="color:{color}; font-weight:bold;">일반보스</span>'
+            elif required_super == 30:
+                boss_type = f'<span style="color:{color}; font-weight:bold;">초보스</span>'
+            else:
+                boss_type = ""
+
+            boss_info = f"{boss_type} {attr_tag}"
+
+        # ✅ 퀘스트 이름
         cursor.execute("SELECT questName_ FROM MstQuest_ WHERE questId_=?", (server_id,))
         name_row = cursor.fetchone()
         quest_name = name_row[0] if name_row else f"Quest {server_id}"
-        quest_name =""
+
         # ✅ gimmickJson 가져오기
         cursor.execute("SELECT gimmickJson_ FROM MstQuestGimmickInformation_ WHERE questId_=?", (server_id,))
         row = cursor.fetchone()
         if not row:
             print(f"❌ serverId={server_id}에 해당하는 기믹 데이터 없음")
             return
-
         parsed_json = json.loads(row[0])
         gimmick_list = []
 
@@ -261,14 +297,12 @@ def export_tm_gimmick_html(server_id=1001971, db_path="data/sakura_ko.db", outpu
                 min_level = to_int(phase.get("min_trail_level"))
                 max_level = to_int(phase.get("max_trail_level"))
                 stage_num = to_int(stage_id)
-
                 entry = {
                     "stage": stage_num,
                     "minLevel": min_level,
                     "maxLevel": max_level,
                     "patterns": []
                 }
-
                 if "level_condition_text" in phase:
                     entry["level_condition_text"] = phase["level_condition_text"]
 
@@ -300,7 +334,6 @@ def export_tm_gimmick_html(server_id=1001971, db_path="data/sakura_ko.db", outpu
         }
         SORT_PRIORITY = {k: i for i, k in enumerate(LABEL_INFO.keys())}
 
-        # ✅ HTML 헤더 및 제목 추가
         html = [f"""<html>
 <head>
 <meta charset="UTF-8">
@@ -320,11 +353,17 @@ def export_tm_gimmick_html(server_id=1001971, db_path="data/sakura_ko.db", outpu
 </style>
 </head>
 <body>
-       <h1>{quest_name}</h1>"""]
+       <h1>{quest_name}</h1>
+       <div style="font-size: 22px; color: #f9f871; font-weight: bold; margin-bottom: 12px;">{highlight_element_tags(boss_info)}</div>"""]
+        def sort_key(entry):
+            max_lv = entry["maxLevel"]
+            min_lv = entry["minLevel"]
 
-        # 🔁 정렬만 stage 기준
-        sorted_entries = sorted(gimmick_list, key=lambda x: x["stage"])
+            # 레벨이 100+인 경우는 맨 뒤로 가게끔 큰 숫자 부여
+            min_sort = 9999 if max_lv >= 100 else min_lv
+            return (min_sort, entry["stage"])
 
+        sorted_entries = sorted(gimmick_list, key=sort_key)
         for entry in sorted_entries:
             html.append(f"<h3>Stage {entry['stage']}:</h3>")
             if "level_condition_text" in entry:
@@ -332,9 +371,7 @@ def export_tm_gimmick_html(server_id=1001971, db_path="data/sakura_ko.db", outpu
 
             sorted_patterns = sorted(
                 entry["patterns"],
-                key=lambda p: SORT_PRIORITY.get(
-                    next((k for k in SORT_PRIORITY if p["slot"].startswith(k)), "zzz")
-                )
+                key=lambda p: SORT_PRIORITY.get(next((k for k in SORT_PRIORITY if p["slot"].startswith(k)), "zzz"))
             )
 
             for pattern in sorted_patterns:
@@ -364,14 +401,13 @@ def export_tm_gimmick_html(server_id=1001971, db_path="data/sakura_ko.db", outpu
     except Exception as e:
         print(f"❌ 오류 발생: {e}")
 
-
-def get_tm_gimmick_html_as_string(server_id=5000029, db_path="data/sakura_ko.db"):
+def get_kizuna_gimmick_html_as_string(server_id=5000029, db_path="data/sakura_ko.db"):
     from io import StringIO
     import contextlib
 
     buf = StringIO()
     with contextlib.redirect_stdout(buf):
-        export_tm_gimmick_html(server_id=server_id, db_path=db_path, output_path="__temp__.html")
+        export_kizuna_gimmick_html(server_id=server_id, db_path=db_path, output_path="__temp__.html")
     if os.path.exists("__temp__.html"):
         with open("__temp__.html", "r", encoding="utf-8") as f:
             html_body = f.read()
@@ -382,4 +418,4 @@ def get_tm_gimmick_html_as_string(server_id=5000029, db_path="data/sakura_ko.db"
     return html_body.strip()
 
 if __name__ == "__main__":
-    export_tm_gimmick_html()
+    export_kizuna_gimmick_html()
