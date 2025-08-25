@@ -7,6 +7,14 @@ from collections import defaultdict
 BASE_IMG_URL = "https://hayaden.github.io/optc-gimmicks/img"
 BASE_IMG_URL = "img"
 
+STATE_ID_TEXT_MAP = {
+    "99": "일반 공격 이외의 데미지 1",
+    "25": "데미지 감소",
+    "47": "데미지 격감",
+    "124": "회복 효과를 데미지로 변환"
+}
+
+# (ICON_MAP, FORCED_ICON_KEYWORDS 등 생략 - 기존 코드 그대로 사용하세요)
 ICON_MAP = {
     1: "common_attack_up_01_icon", 60: "common_icon_chain_upper_limit", 15: "common_icon_blind",
     183: "common_icon_252_skill", 25: "common_icon_damagecut_dummy", 22: "state_icon_invincible",
@@ -58,6 +66,7 @@ ICON_MAP = {
     1024: "common_slot_chance",
     1025: "common_slot_random",
     1026: "common_change_lock",
+    114: "common_icon_tap_countlimit",
     1027: "common_slot_bind",
     2001: "common_weak_01",
     2002: "common_weak_02",
@@ -103,6 +112,7 @@ ICON_MAP = {
     4013: "quest_combo_barrier_cooperation",
     4014: "quest_combo_barrier_bomb",
     4015: "quest_combo_barrier_wa",
+    4016: "quest_combo_barrier_rainbow",
     5001: "common_damage",
     10000: "filter_attribute_power",
     10001: "filter_attribute_technical",
@@ -145,6 +155,7 @@ FORCED_ICON_KEYWORDS = [
     ("슬롯을 랜덤으로 변환", 1025),
     ("슬롯 변환 불가", 1026),
     
+    
     ("약점 타입: 격투형", 2001),
     ("약점 타입: 참격형", 2002),
     ("약점 타입: 타격형", 2003),
@@ -179,6 +190,7 @@ FORCED_ICON_KEYWORDS = [
     ("슬롯 배리어([연] 슬롯", 4013), 
     ("슬롯 배리어([폭탄] 슬롯", 4014), 
     ("슬롯 배리어([和] 슬롯", 4015), 
+    ("슬롯 배리어([무지개] 슬롯", 4016), 
     ("슬롯 배리어(<col=12>[힘]<col=1> 슬롯", 4001), 
     ("슬롯 배리어(<col=11>[기]<col=1> 슬롯", 4002), 
     ("슬롯 배리어(<col=9>[속]<col=1> 슬롯", 4003), 
@@ -190,7 +202,7 @@ FORCED_ICON_KEYWORDS = [
     ("배리어(GREAT", 4008),
     ("배리어(PERFECT", 4009),
     ("데미지", 5001), 
-
+    ("회복", 1013),
     
 ]
 
@@ -213,6 +225,29 @@ def clean_text(text):
     text = text.replace("\u003c", "<").replace("\u003e", ">")
     return re.sub(r"<.*?>", "", text).strip()
 
+_state_token_re = re.compile(r"(?:\\u003c|<)\s*state_id=(\d+)\s*(?:\\u003e|>)")
+def replace_state_tokens(s: str) -> str:
+    """문자열 s 안의 <state_id=XX> 또는 \u003cstate_id=XX\u003e 토큰을
+    STATE_ID_TEXT_MAP에 정의된 한글 문구로 치환한다."""
+    if not isinstance(s, str):
+        return s
+
+    def _sub(m):
+        sid = m.group(1)
+        return STATE_ID_TEXT_MAP.get(sid, m.group(0))  # 매핑 없으면 원문 유지
+
+    return _state_token_re.sub(_sub, s)
+
+def deep_replace_in_phase_obj(obj):
+    """phase 내 문자열 필드들에 replace_state_tokens 적용 (리스트/딕셔너리 안전 처리)"""
+    if isinstance(obj, dict):
+        return {k: deep_replace_in_phase_obj(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [deep_replace_in_phase_obj(v) for v in obj]
+    if isinstance(obj, str):
+        return replace_state_tokens(obj)
+    return obj
+# -------------------------------------------------------------------
 def difficulty_label(min_lv, max_lv):
     return "Level: 100+" if max_lv >= 100 else f"Level: {min_lv}-{max_lv}" if (min_lv or max_lv) else "레벨 없음"
 
@@ -255,6 +290,7 @@ def export_pka_gimmick_html(server_id=1001971, db_path="data/sakura_ko.db", outp
             return
 
         parsed_json = json.loads(row[0])
+        parsed_json = deep_replace_in_phase_obj(parsed_json)
         gimmick_list = []
 
         for stage_id, items in parsed_json.items():

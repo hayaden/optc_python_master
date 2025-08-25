@@ -231,7 +231,7 @@ for eventId, questId, superTicket, bossTicket, attrId, questName in filtered:
 
     attr_name = attribute_color_map.get(attrId, ("?",))[0]
     label = f"[{tag}] [{attr_name}] {questName}"
-    kizuna_html.append(f"<li><a href='{filename}' style='font-size:22px'>{label}</a></li>")
+    kizuna_html.append(f"<li><a href='{filename}' style='font-size:28px !important'>{label}</a></li>")
     html_body = get_kizuna_gimmick_html_as_string(questId)
     with open(os.path.join(OUTPUT_DIR, filename), "w", encoding="utf-8") as f:
         f.write(html_body)

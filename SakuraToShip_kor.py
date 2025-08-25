@@ -109,7 +109,7 @@ def detect_has_special(ship):
     return "no"
 
 ### --- DB 연결 ---
-conn = sqlite3.connect("common/data/sakura_ko.db")
+conn = sqlite3.connect("./data/sakura_ko.db")
 cursor = conn.cursor()
 
 ### --- ① Ship 기본 정보 ---
